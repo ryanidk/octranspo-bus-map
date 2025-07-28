@@ -1,0 +1,9 @@
+[
+  {"min": 2101, "max": 2126, "name": "New Flyer XE40"},
+  {"min": 2501, "max": 2504, "name": "Nova Bus LFSe+"},
+  {"min": 4203, "max": 4526, "name": "Invero D40i"},
+  {"min": 4601, "max": 4849, "name": "Nova Bus LFS"},
+  {"min": 6351, "max": 6403, "name": "New Flyer D60LF"},
+  {"min": 6404, "max": 6709, "name": "New Flyer D60LFR"},
+  {"min": 8101, "max": 8179, "name": "Alexander Dennis Enviro500"}
+]

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OC Transpo Bus Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.13.0/mapbox-gl.css" rel="stylesheet"/>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #busTypeFilter {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1;
+        }
+
+        .bus-marker {
+            width: 30px;
+            height: 30px;
+            transform-origin: center center;
+        }
+    </style>
+</head>
+<body>
+
+<select id="busTypeFilter">
+    <option value="">All Bus Types</option>
+</select>
+<div id="map"></div>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.13.0/mapbox-gl.js"></script>
+<script>
+    mapboxgl.accessToken = 'TOKEN';
+
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/standard',
+        center: [-75.6972, 45.4215],
+        zoom: 12
+    });
+
+    const markerCache = {};
+    let selectedBusType = "";
+
+    function formatNextStop(bus) {
+        if (!bus.next_stop || !bus.actual_time) return '';
+
+        let delayStr = '';
+        const delay = bus.delay_minutes;
+
+        if (delay > 0) {
+            delayStr = ` <span style="color: red">(${delay} min late)</span>`;
+        } else if (delay < 0) {
+            delayStr = ` <span style="color: green">(${Math.abs(delay)} min early)</span>`;
+        } else if (delay === 0) {
+            //delayStr = ` <span style="color: #4caf50">(on time)</span>`;
+            delayStr = '';
+        }
+
+        return `<b>Next Stop:</b> ${bus.next_stop} ${bus.actual_time}${delayStr}<br/>`;
+    }
+
+    function createMarker(bus) {
+        const bearing = ((bus.bearing ?? 0) + 180) % 360;
+        const color = bus.route_color;
+
+        const key = `${color}-${bearing}`;
+        if (markerCache[bus.vehicle_id]) {
+            markerCache[bus.vehicle_id].remove();
+            delete markerCache[bus.vehicle_id];
+        }
+
+        const div = document.createElement('div');
+        div.className = 'bus-marker';
+        div.innerHTML = `
+  <div style="transform: rotate(${bearing}deg); width: 30px; height: 30px;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="30" height="30">
+      <path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/>
+    </svg>
+  </div>
+`;
+
+        const marker = new mapboxgl.Marker({element: div})
+            .setLngLat([bus.lon, bus.lat])
+            .setPopup(new mapboxgl.Popup().setHTML(`
+  <b style="color: ${bus.route_color}">Route ${bus.route_id}</b><br/>
+  <b>Direction:</b> ${bus.direction}<br/>
+  <b>Speed:</b> ${bus.speed} km/h<br/>
+  <b>Bus #:</b> ${bus.vehicle_id}<br/>
+  <b>Type:</b> ${bus.bus_type}<br/>
+  <b>${formatNextStop(bus)}</b>
+`))
+            .addTo(map);
+
+        markerCache[bus.vehicle_id] = marker;
+    }
+
+    async function loadVehicles() {
+        const res = await fetch('/api/vehicles');
+        const buses = await res.json();
+
+        // Clear all markers
+        for (const id in markerCache) {
+            markerCache[id].remove();
+        }
+
+        buses.forEach(bus => {
+            if (!selectedBusType || bus.bus_type === selectedBusType) {
+                createMarker(bus);
+            }
+        });
+    }
+
+    async function loadBusTypes() {
+        const res = await fetch('/api/bus_types');
+        const types = await res.json();
+        const dropdown = document.getElementById('busTypeFilter');
+
+        types.forEach(t => {
+            const option = document.createElement('option');
+            option.value = t.name;
+            option.textContent = t.name;
+            dropdown.appendChild(option);
+        });
+
+        dropdown.addEventListener('change', (e) => {
+            selectedBusType = e.target.value;
+            loadVehicles();
+        });
+    }
+
+    map.on('load', () => {
+        loadVehicles();
+        loadBusTypes();
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.addControl(new mapboxgl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: true
+            },
+            trackUserLocation: true,
+            showUserHeading: true
+        }), 'top-right');
+        setInterval(loadVehicles, 6000);
+    });
+</script>
+</body>
+</html>
